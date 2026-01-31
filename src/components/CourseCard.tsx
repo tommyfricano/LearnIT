@@ -106,7 +106,7 @@ export default function CourseCard({
               </span>
             ) : isInCart ? (
               <Link
-                href="/checkout"
+                href="/checkout-it"
                 className="text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors"
               >
                 Checkout &rarr;

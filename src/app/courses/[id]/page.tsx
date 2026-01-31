@@ -264,7 +264,7 @@ export default function CourseDetailPage() {
                   </div>
                 ) : inCart ? (
                   <Link
-                    href="/checkout"
+                    href="/checkout-it"
                     onClick={() => trackEvent("CourseDetail_CheckoutClick", { courseId })}
                     className="block w-full py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors text-center"
                   >

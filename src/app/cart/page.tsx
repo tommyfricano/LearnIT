@@ -221,7 +221,7 @@ export default function CartPage() {
                   FS.event('Cart_CheckoutHesitation', { timeOnPageMs });
                 */}
                 <Link
-                  href="/checkout"
+                  href="/checkout-it"
                   onClick={() => trackEvent("Cart_ProceedToCheckout", { itemCount: cartCourses.length, totalCents })}
                   className="mt-6 w-full inline-flex items-center justify-center py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
                 >
