@@ -12,11 +12,11 @@ import { trackEvent, identifyUser } from "@/lib/fullstory";
 export default function SignupPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
-    fullName: "Alex Morgan",
-    email: "alex.morgan@learnit.demo",
-    emailConfirm: "alex.morgan@learnit.demo",
+    fullName: "",
+    email: "",
+    emailConfirm: "",
     role: "student",
-    acceptTerms: true,
+    acceptTerms: false,
     acceptMarketing: false,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
