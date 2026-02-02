@@ -27,10 +27,10 @@ export default function CheckoutPage() {
   const [mounted, setMounted] = useState(false);
 
   const [formData, setFormData] = useState({
-    cardNumber: "4242 4242 4242 4242",
-    expiry: "12/28",
-    cvv: "123",
-    cardName: "Alex Morgan",
+    cardNumber: "",
+    expiry: "",
+    cvv: "",
+    cardName: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isProcessing, setIsProcessing] = useState(false);
