@@ -147,7 +147,7 @@ export default function CheckoutPage() {
       setCompletedItemCount(orderItems.length);
       setShowSuccess(true);
       setIsProcessing(false);
-    }, 1500);
+    }, 4000);
   };
 
   const updateField = (field: string, value: string) => {
@@ -376,8 +376,7 @@ export default function CheckoutPage() {
 
                 <button
                   type="submit"
-                  disabled={isProcessing}
-                  className="w-full py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                  className="w-full py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
                 >
                   {isProcessing
                     ? "Processing..."
