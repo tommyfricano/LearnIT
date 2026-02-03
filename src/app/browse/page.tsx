@@ -11,6 +11,7 @@ import {
   addToCart,
   isInCart as checkIsInCart,
   isEnrolled as checkIsEnrolled,
+  seedDemoCourses,
 } from "@/lib/storage";
 import { Course, User } from "@/lib/types";
 import { trackEvent } from "@/lib/fullstory";
@@ -31,6 +32,8 @@ export default function BrowsePage() {
   useEffect(() => {
     setMounted(true);
     setUser(getUser());
+    // Seed demo courses if none exist (allows anonymous browsing)
+    seedDemoCourses("demo-instructor");
     const allCourses = getCourses();
     setCourses(allCourses);
 
