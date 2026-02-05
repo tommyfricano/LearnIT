@@ -9,7 +9,9 @@ import {
   getUser,
   getCart,
   getCourseById,
+  getCourses,
   removeFromCart,
+  addToCart,
   formatPrice,
 } from "@/lib/storage";
 import { User, Course } from "@/lib/types";
@@ -27,7 +29,13 @@ export default function CartPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [cartCourses, setCartCourses] = useState<Course[]>([]);
+  const [allCourses, setAllCourses] = useState<Course[]>([]);
   const [mounted, setMounted] = useState(false);
+
+  // Upsell modal state
+  const [showUpsellModal, setShowUpsellModal] = useState(false);
+  const [upsellStep, setUpsellStep] = useState<"processing" | "upsell">("processing");
+  const [canDismiss, setCanDismiss] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -38,6 +46,9 @@ export default function CartPage() {
     }
     setUser(currentUser);
     refreshCart();
+
+    // Load all courses for upsell recommendations
+    setAllCourses(getCourses());
 
     const cart = getCart();
     const courses = cart
@@ -65,6 +76,87 @@ export default function CartPage() {
   };
 
   const totalCents = cartCourses.reduce((sum, c) => sum + (c.price ?? 0), 0);
+
+  // Get courses not in cart for upsell
+  const cartIds = new Set(cartCourses.map((c) => c.id));
+  const upsellCourses = allCourses.filter((c) => !cartIds.has(c.id)).slice(0, 2);
+
+  /*
+    UX FRICTION: "Checkout upsell modal" pattern — when user clicks "Proceed to Checkout",
+    instead of going directly to checkout, we show a blocking modal with:
+    1. Fake "processing" delay
+    2. Upsell recommendations they must review before proceeding
+    This creates friction right at the moment of highest purchase intent.
+    TODO [FullStory]: Track:
+    - Modal abandonment rate
+    - Upsell conversion rate
+    - Rage clicks on disabled checkout button
+    - Time spent reviewing upsells
+  */
+  const handleProceedToCheckout = () => {
+    trackEvent("Cart_CheckoutAttempt", {
+      itemCount: cartCourses.length,
+      totalCents,
+    });
+
+    setShowUpsellModal(true);
+    setUpsellStep("processing");
+    setCanDismiss(false);
+
+    trackEvent("Cart_UpsellModalOpened", {
+      itemCount: cartCourses.length,
+      totalCents,
+    });
+
+    // Step 1: Fake processing delay (2 seconds)
+    setTimeout(() => {
+      setUpsellStep("upsell");
+
+      // Step 2: Only allow proceeding after 2.5 more seconds
+      setTimeout(() => {
+        setCanDismiss(true);
+        trackEvent("Cart_UpsellModalDismissable", {
+          itemCount: cartCourses.length,
+        });
+      }, 2500);
+    }, 2000);
+  };
+
+  const handleAddUpsell = (courseId: string) => {
+    addToCart(courseId);
+    refreshCart();
+    trackEvent("Cart_UpsellAccepted", {
+      courseId,
+      newCartSize: cartCourses.length + 1,
+    });
+  };
+
+  const handleSkipUpsell = () => {
+    if (!canDismiss) {
+      trackEvent("Cart_UpsellEarlySkipAttempt", {
+        step: upsellStep,
+      });
+      return;
+    }
+    trackEvent("Cart_UpsellSkipped", {
+      itemCount: cartCourses.length,
+    });
+    router.push("/checkout-it");
+  };
+
+  const handleContinueToCheckout = () => {
+    if (!canDismiss) {
+      trackEvent("Cart_UpsellEarlyCheckoutAttempt", {
+        step: upsellStep,
+      });
+      return;
+    }
+    trackEvent("Cart_UpsellProceedToCheckout", {
+      itemCount: cartCourses.length,
+      totalCents: cartCourses.reduce((sum, c) => sum + (c.price ?? 0), 0),
+    });
+    router.push("/checkout-it");
+  };
 
   if (!mounted || !user) {
     return (
@@ -199,22 +291,120 @@ export default function CartPage() {
                   </span>
                 </div>
 
-                {/*
-                  UX FRICTION: The checkout button says "Proceed to Checkout"
-                  which implies another step before purchase. Users may hesitate
-                  wondering how many more steps there are. No progress indicator
-                  is shown.
-                  TODO [FullStory]: Track hesitation time before clicking
-                  checkout button.
-                  FS.event('Cart_CheckoutHesitation', { timeOnPageMs });
-                */}
-                <Link
-                  href="/checkout-it"
-                  onClick={() => trackEvent("Cart_ProceedToCheckout", { itemCount: cartCourses.length, totalCents })}
+                <button
+                  onClick={handleProceedToCheckout}
                   className="mt-6 w-full inline-flex items-center justify-center py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
                 >
                   Proceed to Checkout
-                </Link>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Upsell Modal */}
+          {showUpsellModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              {/* Backdrop */}
+              <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                onClick={handleSkipUpsell}
+              />
+
+              {/* Modal */}
+              <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+                {/* Step 1: Processing */}
+                {upsellStep === "processing" && (
+                  <div className="p-8 text-center">
+                    <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-6" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      Preparing Your Checkout...
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Please wait while we prepare your order.
+                    </p>
+                    <p className="text-xs text-gray-400 mt-4">
+                      Do not close this window
+                    </p>
+                  </div>
+                )}
+
+                {/* Step 2: Upsell */}
+                {upsellStep === "upsell" && (
+                  <div className="p-6">
+                    <div className="text-center mb-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                        Wait! Don&apos;t Miss Out
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        Students who bought your courses also loved these:
+                      </p>
+                    </div>
+
+                    {/* Upsell courses */}
+                    <div className="space-y-3 mb-6">
+                      {upsellCourses.map((course) => (
+                        <div
+                          key={course.id}
+                          className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
+                        >
+                          <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {course.title}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              ${formatPrice(course.price ?? 0)}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleAddUpsell(course.id)}
+                            disabled={cartIds.has(course.id)}
+                            className="text-xs font-medium text-indigo-600 hover:text-indigo-700 disabled:text-gray-400"
+                          >
+                            {cartIds.has(course.id) ? "Added" : "+ Add"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Button area with tiny skip option */}
+                    <div className="border-t border-gray-100 pt-4">
+                      <p className="text-xs text-gray-400 text-center mb-4">
+                        {canDismiss
+                          ? "Ready to checkout"
+                          : "Reviewing recommendations..."}
+                      </p>
+
+                      {/* Primary CTA - Large and prominent */}
+                      <button
+                        onClick={handleContinueToCheckout}
+                        disabled={!canDismiss}
+                        className={`w-full py-3 text-sm font-medium rounded-lg transition-colors ${
+                          canDismiss
+                            ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                            : "bg-indigo-300 text-indigo-100 cursor-not-allowed"
+                        }`}
+                      >
+                        Continue to Checkout
+                      </button>
+
+                      {/* Skip button - Tiny and hard to click */}
+                      <div className="flex justify-center mt-3">
+                        <button
+                          onClick={handleSkipUpsell}
+                          disabled={!canDismiss}
+                          className={`text-[10px] px-2 py-0.5 transition-colors ${
+                            canDismiss
+                              ? "text-gray-400 hover:text-gray-500"
+                              : "text-gray-300 cursor-not-allowed"
+                          }`}
+                        >
+                          No thanks, just checkout
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

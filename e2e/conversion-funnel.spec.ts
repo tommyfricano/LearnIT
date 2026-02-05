@@ -8,7 +8,7 @@ import { test, expect, Page } from "@playwright/test";
  * - Revenue is lost due to UX friction points (bottom of funnel leaks)
  *
  * Key friction points tested:
- * 1. Cart Modal - Forced 5.5 second wait with upsells
+ * 1. Checkout Modal - Forced 4.5 second wait with upsells when proceeding to checkout
  * 2. Surprise Fees - Price increase at checkout ($4.99 + 8.25% tax)
  *
  * FullStory signals captured:
@@ -135,87 +135,90 @@ test.describe("Signup Success - Top of Funnel", () => {
   });
 });
 
-test.describe("Cart Modal Friction - Revenue Loss Point #1", () => {
+test.describe("Checkout Modal Friction - Revenue Loss Point #1", () => {
   test.beforeEach(async ({ page }) => {
     // Sign up a fresh user
     await page.goto("/signup");
-    const email = `cart-test-${Date.now()}@example.com`;
-    await fillSignupForm(page, "Cart Test User", email);
+    const email = `checkout-modal-${Date.now()}@example.com`;
+    await fillSignupForm(page, "Checkout Modal Test", email);
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL("/dashboard", { timeout: 5000 });
-    // Navigate to browse page
+
+    // Navigate to browse and add item to cart (simple flow now)
     await page.goto("/browse");
-    await expect(page).toHaveURL("/browse");
+    await page.locator("text=Add to cart").first().click();
+
+    // Wait for toast confirmation
+    await expect(page.locator("text=added to cart")).toBeVisible({ timeout: 2000 });
+
+    // Navigate to cart
+    await page.goto("/cart");
+    await expect(page).toHaveURL("/cart");
   });
 
-  test("user is blocked by 5.5 second forced modal when adding to cart", async ({ page }) => {
-    // Find and click add to cart on first course
-    const addToCartButton = page.locator("text=Add to cart").first();
-    await addToCartButton.click();
+  test("user is blocked by 4.5 second forced modal when proceeding to checkout", async ({ page }) => {
+    // Click proceed to checkout
+    await page.locator("text=Proceed to Checkout").click();
 
     // Modal should appear immediately
     const modal = page.locator(".fixed.inset-0");
     await expect(modal).toBeVisible();
 
     // Step 1: Processing state (should show spinner)
-    await expect(page.locator("text=Securing Your Spot...")).toBeVisible();
+    await expect(page.locator("text=Preparing Your Checkout...")).toBeVisible();
     await expect(page.locator("text=Do not close this window")).toBeVisible();
 
-    // Wait for step 2: Confirmation
-    await expect(page.locator("text=Added to Cart!")).toBeVisible({ timeout: 3000 });
-    await expect(page.locator("text=Loading recommendations...")).toBeVisible();
+    // Wait for step 2: Upsell
+    await expect(page.locator("text=Wait! Don't Miss Out")).toBeVisible({ timeout: 3000 });
+    await expect(page.locator("text=Students who bought your courses also loved these")).toBeVisible();
 
-    // Wait for step 3: Upsell
-    await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 2000 });
-    await expect(page.locator("text=Students who bought this also enjoyed")).toBeVisible();
+    // Buttons should be disabled initially (shows "Reviewing recommendations...")
+    await expect(page.locator("text=Reviewing recommendations...")).toBeVisible();
 
-    // Buttons should be disabled initially
-    const continueButton = page.locator("button:has-text('No thanks')");
-    const viewCartButton = page.locator("button:has-text('View Cart')");
-
+    // Continue button should be disabled
+    const continueButton = page.locator("button:has-text('Continue to Checkout')");
     await expect(continueButton).toBeDisabled();
-    await expect(viewCartButton).toBeDisabled();
 
     // Must wait for buttons to become enabled
-    await expect(continueButton).toBeEnabled({ timeout: 3000 });
-    await expect(viewCartButton).toBeEnabled();
+    await expect(continueButton).toBeEnabled({ timeout: 4000 });
+    await expect(page.locator("text=Ready to checkout")).toBeVisible();
   });
 
-  test("user rage clicks on disabled No thanks button", async ({ page }) => {
-    // Add to cart
-    await page.locator("text=Add to cart").first().click();
+  test("user rage clicks on disabled Continue to Checkout button", async ({ page }) => {
+    // Click proceed to checkout
+    await page.locator("text=Proceed to Checkout").click();
 
     // Wait for upsell step where buttons appear
-    await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 4000 });
+    await expect(page.locator("text=Wait! Don't Miss Out")).toBeVisible({ timeout: 4000 });
 
-    // Rage click the disabled No thanks button
-    await rageClick(page, "button:has-text('No thanks')", 8);
+    // Rage click the disabled Continue button
+    await rageClick(page, "button:has-text('Continue to Checkout')", 8);
 
     // Modal should still be visible (user is trapped)
     await expect(page.locator(".fixed.inset-0")).toBeVisible();
 
-    // Eventually buttons become enabled
-    await expect(page.locator("button:has-text('No thanks')")).toBeEnabled({ timeout: 8000 });
+    // Eventually button becomes enabled
+    await expect(page.locator("button:has-text('Continue to Checkout')")).toBeEnabled({ timeout: 8000 });
   });
 
-  test("user rage clicks on disabled View Cart button", async ({ page }) => {
-    // Add to cart
-    await page.locator("text=Add to cart").first().click();
+  test("user rage clicks on tiny skip button", async ({ page }) => {
+    // Click proceed to checkout
+    await page.locator("text=Proceed to Checkout").click();
 
     // Wait for upsell step
-    await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 4000 });
+    await expect(page.locator("text=Wait! Don't Miss Out")).toBeVisible({ timeout: 4000 });
 
-    // Rage click the disabled View Cart button
-    await rageClick(page, "button:has-text('View Cart')", 8);
+    // Rage click the tiny "No thanks, just checkout" button
+    await rageClick(page, "text=No thanks, just checkout", 8);
 
-    // User is still trapped
+    // User is still trapped (button is disabled)
     await expect(page.locator(".fixed.inset-0")).toBeVisible();
   });
 
   test("user rage clicks backdrop trying to escape modal", async ({ page }) => {
-    // Add to cart
-    await page.locator("text=Add to cart").first().click();
-    await expect(page.locator("text=Securing Your Spot...")).toBeVisible();
+    // Click proceed to checkout
+    await page.locator("text=Proceed to Checkout").click();
+    await expect(page.locator("text=Preparing Your Checkout...")).toBeVisible();
 
     // Get viewport dimensions for clicking around the modal
     const viewport = page.viewportSize();
@@ -230,7 +233,7 @@ test.describe("Cart Modal Friction - Revenue Loss Point #1", () => {
     await expect(page.locator(".fixed.inset-0")).toBeVisible();
 
     // Wait for upsell and try again
-    await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=Wait! Don't Miss Out")).toBeVisible({ timeout: 5000 });
 
     // More rage clicks on backdrop during upsell
     await deadClick(page, 50, 50, 6);
@@ -241,65 +244,63 @@ test.describe("Cart Modal Friction - Revenue Loss Point #1", () => {
   });
 
   test("user hovers frantically over disabled buttons showing frustration", async ({ page }) => {
-    // Add to cart
-    await page.locator("text=Add to cart").first().click();
+    // Click proceed to checkout
+    await page.locator("text=Proceed to Checkout").click();
 
     // Wait for upsell step
-    await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 4000 });
+    await expect(page.locator("text=Wait! Don't Miss Out")).toBeVisible({ timeout: 4000 });
 
-    // Frustrated hover pattern over No thanks button
-    await frustratedHover(page, "button:has-text('No thanks')");
+    // Frustrated hover pattern over Continue button
+    await frustratedHover(page, "button:has-text('Continue to Checkout')");
 
-    // Frustrated hover over View Cart button
-    await frustratedHover(page, "button:has-text('View Cart')");
+    // Frustrated hover over tiny skip button
+    await frustratedHover(page, "text=No thanks, just checkout");
 
-    // Hover over the "Please review" text (user reading it repeatedly)
-    await hoverAndPause(page, "text=Please review the recommendations", 2000);
+    // Hover over the "Reviewing recommendations" text (user reading it)
+    await hoverAndPause(page, "text=Reviewing recommendations", 2000);
 
     // Rage click after hovering
-    await rageClick(page, "button:has-text('No thanks')", 5);
+    await rageClick(page, "button:has-text('Continue to Checkout')", 5);
   });
 
   test("user hovers over upsell items but rage clicks to escape", async ({ page }) => {
-    // Add to cart
-    await page.locator("text=Add to cart").first().click();
+    // Click proceed to checkout
+    await page.locator("text=Proceed to Checkout").click();
 
-    // Wait for upsell step
-    await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 4000 });
-    await expect(page.locator("text=Students who bought this also enjoyed")).toBeVisible();
+    // Wait for upsell step and buttons to be enabled
+    await expect(page.locator("text=Wait! Don't Miss Out")).toBeVisible({ timeout: 6000 });
+    await expect(page.locator("button:has-text('Continue to Checkout')")).toBeEnabled({ timeout: 8000 });
 
     // Hover over upsell course items (user considering but frustrated)
     const upsellItems = page.locator(".bg-gray-50.rounded-lg.border");
     const count = await upsellItems.count();
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < Math.min(count, 2); i++) {
       await upsellItems.nth(i).hover();
       await page.waitForTimeout(500);
     }
 
-    // Then rage click the disabled button (rejecting upsells)
-    await rageClick(page, "button:has-text('No thanks')", 6);
+    // Then rage click the tiny skip button (rejecting upsells)
+    await rageClick(page, "text=No thanks, just checkout", 6);
 
-    // Wait for button to enable
-    await expect(page.locator("button:has-text('No thanks')")).toBeEnabled({ timeout: 8000 });
+    // Verify we can eventually exit to checkout
+    await page.locator("button:has-text('Continue to Checkout')").click();
+    await expect(page).toHaveURL("/checkout-it");
   });
 
-  test("user abandons browse page after experiencing modal friction", async ({ page }) => {
-    // Add to cart and wait through modal
-    await page.locator("text=Add to cart").first().click();
-    await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 5000 });
+  test("user abandons cart page after experiencing modal friction", async ({ page }) => {
+    // Click proceed to checkout and wait through modal
+    await page.locator("text=Proceed to Checkout").click();
+    await expect(page.locator("text=Wait! Don't Miss Out")).toBeVisible({ timeout: 5000 });
 
     // Rage click while waiting
-    await rageClick(page, "button:has-text('No thanks')", 4);
+    await rageClick(page, "button:has-text('Continue to Checkout')", 4);
 
     // Wait for dismiss to be allowed
-    await expect(page.locator("button:has-text('No thanks')")).toBeEnabled({ timeout: 8000 });
+    await expect(page.locator("button:has-text('Continue to Checkout')")).toBeEnabled({ timeout: 8000 });
 
-    // User chooses to continue shopping (not view cart = potential abandonment signal)
-    await page.locator("button:has-text('No thanks')").click();
-
-    // User is back on browse but may navigate away (simulated)
-    await expect(page).toHaveURL("/browse");
+    // User clicks backdrop to dismiss modal and abandons
+    await page.mouse.click(50, 50);
 
     // Navigate away without completing purchase (abandonment)
     await page.goto("/");
@@ -310,47 +311,28 @@ test.describe("Surprise Fees at Checkout - Revenue Loss Point #2", () => {
   test.beforeEach(async ({ page }) => {
     // Sign up and add item to cart
     await page.goto("/signup");
-    const email = `checkout-test-${Date.now()}@example.com`;
-    await fillSignupForm(page, "Checkout Test User", email);
+    const email = `fees-test-${Date.now()}@example.com`;
+    await fillSignupForm(page, "Fees Test User", email);
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL("/dashboard", { timeout: 5000 });
 
-    // Navigate to browse
+    // Navigate to browse and add to cart (simple flow)
     await page.goto("/browse");
-
-    // Add to cart and wait through modal
     await page.locator("text=Add to cart").first().click();
-    await expect(page.locator("button:has-text('View Cart')")).toBeEnabled({ timeout: 7000 });
-    await page.locator("button:has-text('View Cart')").click();
-  });
+    await expect(page.locator("text=added to cart")).toBeVisible({ timeout: 2000 });
 
-  test("cart shows clean total without fees", async ({ page }) => {
-    // Verify we're on cart page
+    // Go to cart
+    await page.goto("/cart");
     await expect(page).toHaveURL("/cart");
 
-    // Hover over the total to show user checking the price
-    await hoverAndPause(page, ".font-semibold:has-text('$')", 1000);
-
-    // Extract price from cart
-    const cartTotal = page.locator(".font-semibold:has-text('$')").last();
-    const cartPrice = await cartTotal.textContent();
-
-    // Store for comparison
-    expect(cartPrice).toBeTruthy();
-
-    // No mention of platform fee or tax on cart page
-    await expect(page.locator("text=Platform Fee")).not.toBeVisible();
-    await expect(page.locator("text=Tax")).not.toBeVisible();
+    // Click Proceed to Checkout and wait through upsell modal
+    await page.locator("text=Proceed to Checkout").click();
+    await expect(page.locator("button:has-text('Continue to Checkout')")).toBeEnabled({ timeout: 7000 });
+    await page.locator("button:has-text('Continue to Checkout')").click();
   });
 
   test("checkout reveals surprise fees - user hovers over each fee in shock", async ({ page }) => {
-    // Get cart total first
-    const cartTotalElement = page.locator(".font-semibold:has-text('$')").last();
-    const cartTotalText = await cartTotalElement.textContent();
-    const cartTotal = parseFloat(cartTotalText?.replace("$", "") || "0");
-
-    // Proceed to checkout
-    await page.click("text=Proceed to Checkout");
+    // We're on checkout page from beforeEach
     await expect(page).toHaveURL("/checkout-it");
 
     // User sees the fees and hovers over each one (showing confusion/shock)
@@ -365,21 +347,17 @@ test.describe("Surprise Fees at Checkout - Revenue Loss Point #2", () => {
     // Hover over Tax line
     await hoverAndPause(page, "text=Tax (8.25%)", 2000);
 
-    // Hover over the new total (comparing mentally to cart price)
-    const checkoutTotalElement = page.locator(".font-semibold:has-text('$')").last();
-    await checkoutTotalElement.hover();
-    await page.waitForTimeout(2500); // Long pause = user processing the price increase
+    // Hover over the Total line (user processing the price increase)
+    await hoverAndPause(page, "text=Total", 2500);
 
-    const checkoutTotalText = await checkoutTotalElement.textContent();
-    const checkoutTotal = parseFloat(checkoutTotalText?.replace("$", "") || "0");
-
-    // Checkout total should be significantly higher than cart total
-    expect(checkoutTotal).toBeGreaterThan(cartTotal);
+    // Verify fees are visible (the key assertion for this test)
+    await expect(page.locator("text=Platform Fee")).toBeVisible();
+    await expect(page.locator("text=$4.99")).toBeVisible();
+    await expect(page.locator("text=Tax (8.25%)")).toBeVisible();
   });
 
   test("user rage clicks back button after seeing surprise fees", async ({ page }) => {
-    // Navigate to checkout
-    await page.click("text=Proceed to Checkout");
+    // We're on checkout page from beforeEach
     await expect(page).toHaveURL("/checkout-it");
 
     // User sees the fees
@@ -398,14 +376,8 @@ test.describe("Surprise Fees at Checkout - Revenue Loss Point #2", () => {
     // User ends up back on cart or earlier
   });
 
-  test("user hovers between cart total and checkout total comparing prices", async ({ page }) => {
-    // Remember cart total position
-    const cartTotalElement = page.locator(".font-semibold:has-text('$')").last();
-    await hoverAndPause(page, ".font-semibold:has-text('$')", 1500);
-    const cartTotalText = await cartTotalElement.textContent();
-
-    // Go to checkout
-    await page.click("text=Proceed to Checkout");
+  test("user examines fees in order summary", async ({ page }) => {
+    // We're on checkout page from beforeEach
     await expect(page).toHaveURL("/checkout-it");
 
     // Hover over checkout total
@@ -424,8 +396,7 @@ test.describe("Surprise Fees at Checkout - Revenue Loss Point #2", () => {
   });
 
   test("user abandons checkout after hovering over fees", async ({ page }) => {
-    // Navigate to checkout
-    await page.click("text=Proceed to Checkout");
+    // We're on checkout page from beforeEach
     await expect(page).toHaveURL("/checkout-it");
 
     // User examines the fees
@@ -442,8 +413,8 @@ test.describe("Surprise Fees at Checkout - Revenue Loss Point #2", () => {
   });
 
   test("user sees fee breakdown and rage clicks submit without filling form", async ({ page }) => {
-    // Navigate to checkout
-    await page.click("text=Proceed to Checkout");
+    // We're on checkout page from beforeEach
+    await expect(page).toHaveURL("/checkout-it");
 
     // Hover over fees
     await hoverAndPause(page, "text=Platform Fee", 1000);
@@ -457,8 +428,8 @@ test.describe("Surprise Fees at Checkout - Revenue Loss Point #2", () => {
   });
 
   test("user hovers over submit button hesitating due to high price", async ({ page }) => {
-    // Navigate to checkout
-    await page.click("text=Proceed to Checkout");
+    // We're on checkout page from beforeEach
+    await expect(page).toHaveURL("/checkout-it");
 
     // Fill out form partially
     await page.fill("#cardNumber", "4242424242424242");
@@ -484,7 +455,7 @@ test.describe("Surprise Fees at Checkout - Revenue Loss Point #2", () => {
 });
 
 test.describe("Full Funnel - Signup to Abandonment", () => {
-  test("user completes signup but rage quits at cart modal", async ({ page }) => {
+  test("user completes signup but rage quits at checkout modal", async ({ page }) => {
     // Step 1: Signup (SUCCESS)
     await page.goto("/signup");
     const email = `abandon1-${Date.now()}@example.com`;
@@ -495,11 +466,16 @@ test.describe("Full Funnel - Signup to Abandonment", () => {
     // Navigate to browse
     await page.goto("/browse");
 
-    // Step 2: Add to cart (triggers modal friction)
+    // Step 2: Add to cart (simple toast notification)
     await page.locator("text=Add to cart").first().click();
+    await expect(page.locator("text=added to cart")).toBeVisible({ timeout: 2000 });
 
-    // Step 3: User gets frustrated during processing step
-    await expect(page.locator("text=Securing Your Spot...")).toBeVisible();
+    // Go to cart
+    await page.goto("/cart");
+
+    // Step 3: Try to proceed to checkout (triggers modal friction)
+    await page.locator("text=Proceed to Checkout").click();
+    await expect(page.locator("text=Preparing Your Checkout...")).toBeVisible();
 
     // Rage clicks trying to dismiss
     const viewport = page.viewportSize();
@@ -522,23 +498,25 @@ test.describe("Full Funnel - Signup to Abandonment", () => {
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL("/dashboard", { timeout: 5000 });
 
-    // Navigate to browse
+    // Navigate to browse and add to cart
     await page.goto("/browse");
-
-    // Step 2: Add to cart (endure the modal with frustration)
     await page.locator("text=Add to cart").first().click();
-    await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=added to cart")).toBeVisible({ timeout: 2000 });
 
-    // Rage click during upsell
-    await rageClick(page, "button:has-text('View Cart')", 4);
-
-    await expect(page.locator("button:has-text('View Cart')")).toBeEnabled({ timeout: 8000 });
-    await page.locator("button:has-text('View Cart')").click();
-
-    // Step 3: View cart - hover over total
+    // Step 2: View cart - hover over total
+    await page.goto("/cart");
     await expect(page).toHaveURL("/cart");
     await hoverAndPause(page, ".font-semibold:has-text('$')", 1500);
+
+    // Step 3: Proceed to checkout (endure modal with frustration)
     await page.click("text=Proceed to Checkout");
+    await expect(page.locator("text=Wait! Don't Miss Out")).toBeVisible({ timeout: 5000 });
+
+    // Rage click during upsell
+    await rageClick(page, "button:has-text('Continue to Checkout')", 4);
+
+    await expect(page.locator("button:has-text('Continue to Checkout')")).toBeEnabled({ timeout: 8000 });
+    await page.locator("button:has-text('Continue to Checkout')").click();
 
     // Step 4: See surprise fees - hover and examine each
     await expect(page).toHaveURL("/checkout-it");
@@ -563,16 +541,21 @@ test.describe("Full Funnel - Signup to Abandonment", () => {
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL("/dashboard", { timeout: 5000 });
 
-    // Navigate to browse
+    // Navigate to browse and add to cart
     await page.goto("/browse");
-
-    // Step 2: Rage through modal
     await page.locator("text=Add to cart").first().click();
-    await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=added to cart")).toBeVisible({ timeout: 2000 });
+
+    // Go to cart
+    await page.goto("/cart");
+
+    // Step 2: Rage through checkout modal
+    await page.locator("text=Proceed to Checkout").click();
+    await expect(page.locator("text=Wait! Don't Miss Out")).toBeVisible({ timeout: 5000 });
 
     // Rage click both buttons
-    await rageClick(page, "button:has-text('No thanks')", 5);
-    await rageClick(page, "button:has-text('View Cart')", 5);
+    await rageClick(page, "text=No thanks, just checkout", 5);
+    await rageClick(page, "button:has-text('Continue to Checkout')", 5);
 
     // Rage click backdrop
     const viewport = page.viewportSize();
@@ -580,13 +563,10 @@ test.describe("Full Funnel - Signup to Abandonment", () => {
       await deadClick(page, 30, 30, 6);
     }
 
-    await expect(page.locator("button:has-text('View Cart')")).toBeEnabled({ timeout: 8000 });
-    await page.locator("button:has-text('View Cart')").click();
+    await expect(page.locator("button:has-text('Continue to Checkout')")).toBeEnabled({ timeout: 8000 });
+    await page.locator("button:has-text('Continue to Checkout')").click();
 
-    // Step 3: Rage click checkout button
-    await rageClick(page, "text=Proceed to Checkout", 3);
-
-    // Step 4: Rage click submit without filling form
+    // Step 3: Rage click submit without filling form
     await rageClick(page, "button[type='submit']", 6);
 
     // Rage click on fee elements
@@ -605,18 +585,20 @@ test.describe("Full Funnel - Signup to Abandonment", () => {
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL("/dashboard", { timeout: 5000 });
 
-    // Navigate to browse
+    // Navigate to browse and add to cart
     await page.goto("/browse");
-
-    // Step 2: Add to cart and endure modal
     await page.locator("text=Add to cart").first().click();
-    await expect(page.locator("button:has-text('View Cart')")).toBeEnabled({ timeout: 7000 });
-    await page.locator("button:has-text('View Cart')").click();
+    await expect(page.locator("text=added to cart")).toBeVisible({ timeout: 2000 });
 
-    // Step 3: Proceed through cart
+    // Go to cart
+    await page.goto("/cart");
+
+    // Step 2: Proceed to checkout and endure modal
     await page.click("text=Proceed to Checkout");
+    await expect(page.locator("button:has-text('Continue to Checkout')")).toBeEnabled({ timeout: 7000 });
+    await page.locator("button:has-text('Continue to Checkout')").click();
 
-    // Step 4: Accept the surprise fees and complete purchase
+    // Step 3: Accept the surprise fees and complete purchase
     await expect(page.locator("text=Platform Fee")).toBeVisible();
 
     // Fill payment form
@@ -636,30 +618,37 @@ test.describe("Full Funnel - Signup to Abandonment", () => {
 });
 
 test.describe("Funnel Metrics - Quantifying Revenue Loss", () => {
-  test("measure time spent in cart modal", async ({ page }) => {
+  test("measure time spent in checkout modal", async ({ page }) => {
     // Setup
     await page.goto("/signup");
     const email = `timer-${Date.now()}@example.com`;
     await fillSignupForm(page, "Timer Test", email);
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL("/dashboard", { timeout: 5000 });
-    await page.goto("/browse");
 
-    // Start timer when clicking add to cart
-    const startTime = Date.now();
+    // Add to cart (simple flow)
+    await page.goto("/browse");
     await page.locator("text=Add to cart").first().click();
+    await expect(page.locator("text=added to cart")).toBeVisible({ timeout: 2000 });
+
+    // Go to cart
+    await page.goto("/cart");
+
+    // Start timer when clicking proceed to checkout
+    const startTime = Date.now();
+    await page.locator("text=Proceed to Checkout").click();
 
     // Wait for modal to become dismissable
-    await expect(page.locator("button:has-text('No thanks')")).toBeEnabled({ timeout: 8000 });
+    await expect(page.locator("button:has-text('Continue to Checkout')")).toBeEnabled({ timeout: 8000 });
 
     // Calculate time spent
     const timeInModal = Date.now() - startTime;
 
-    // Assert minimum time is ~5.5 seconds (forced wait)
-    expect(timeInModal).toBeGreaterThan(5000);
+    // Assert minimum time is ~4.5 seconds (forced wait)
+    expect(timeInModal).toBeGreaterThan(4000);
 
     // Log for reporting
-    console.log(`Time forced in cart modal: ${timeInModal}ms`);
+    console.log(`Time forced in checkout modal: ${timeInModal}ms`);
   });
 
   test("calculate price increase percentage at checkout", async ({ page }) => {
@@ -669,22 +658,36 @@ test.describe("Funnel Metrics - Quantifying Revenue Loss", () => {
     await fillSignupForm(page, "Price Test", email);
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL("/dashboard", { timeout: 5000 });
+
+    // Add to cart (simple flow)
     await page.goto("/browse");
-
     await page.locator("text=Add to cart").first().click();
-    await expect(page.locator("button:has-text('View Cart')")).toBeEnabled({ timeout: 7000 });
-    await page.locator("button:has-text('View Cart')").click();
+    await expect(page.locator("text=added to cart")).toBeVisible({ timeout: 2000 });
 
-    // Get cart price
-    const cartPriceText = await page.locator(".font-semibold:has-text('$')").last().textContent();
-    const cartPrice = parseFloat(cartPriceText?.replace("$", "") || "0");
+    // Go to cart
+    await page.goto("/cart");
+    await expect(page).toHaveURL("/cart");
+    await expect(page.locator("text=Total").first()).toBeVisible();
 
-    // Go to checkout
+    // Extract cart total from the Total row
+    const cartTotalRow = page.locator(".font-semibold:has-text('$')").last();
+    const cartPriceText = await cartTotalRow.textContent();
+    const cartPrice = parseFloat(cartPriceText?.replace("$", "").trim() || "0");
+
+    // Go to checkout (with upsell modal)
     await page.click("text=Proceed to Checkout");
+    await expect(page.locator("button:has-text('Continue to Checkout')")).toBeEnabled({ timeout: 7000 });
+    await page.locator("button:has-text('Continue to Checkout')").click();
 
-    // Get checkout price
-    const checkoutPriceText = await page.locator(".font-semibold:has-text('$')").last().textContent();
-    const checkoutPrice = parseFloat(checkoutPriceText?.replace("$", "") || "0");
+    // Wait for checkout to load and show fees
+    await expect(page).toHaveURL("/checkout-it");
+    await expect(page.locator("text=Platform Fee")).toBeVisible();
+
+    // Get checkout price from the submit button (most reliable)
+    const submitButton = page.locator("button[type='submit']");
+    const buttonText = await submitButton.textContent();
+    const priceMatch = buttonText?.match(/\$(\d+\.\d{2})/);
+    const checkoutPrice = priceMatch ? parseFloat(priceMatch[1]) : 0;
 
     // Calculate increase
     const priceIncrease = checkoutPrice - cartPrice;
@@ -701,37 +704,39 @@ test.describe("Funnel Metrics - Quantifying Revenue Loss", () => {
 });
 
 test.describe("FullStory Signal Generation - Rage Clicks & Hovers", () => {
-  test("generate rage click signals on cart modal elements", async ({ page }) => {
+  test("generate rage click signals on checkout modal elements", async ({ page }) => {
     // Setup
     await page.goto("/signup");
     const email = `rage-signal-${Date.now()}@example.com`;
     await fillSignupForm(page, "Rage Signal Test", email);
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL("/dashboard", { timeout: 5000 });
+
+    // Add to cart (simple flow)
     await page.goto("/browse");
-
-    // Trigger modal
     await page.locator("text=Add to cart").first().click();
-    await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=added to cart")).toBeVisible({ timeout: 2000 });
 
-    // Generate rage click signals on key elements
-    console.log("Generating rage clicks on No thanks button...");
-    await rageClick(page, "button:has-text('No thanks')", 10);
+    // Go to cart and trigger modal
+    await page.goto("/cart");
+    await page.locator("text=Proceed to Checkout").click();
 
-    console.log("Generating rage clicks on View Cart button...");
-    await rageClick(page, "button:has-text('View Cart')", 10);
+    // Wait for upsell step where buttons appear
+    await expect(page.locator("text=Wait! Don't Miss Out")).toBeVisible({ timeout: 6000 });
 
-    console.log("Generating rage clicks on modal backdrop...");
-    const viewport = page.viewportSize();
-    if (viewport) {
-      await deadClick(page, 20, 20, 8);
-      await deadClick(page, viewport.width - 20, 20, 8);
-      await deadClick(page, 20, viewport.height - 20, 8);
-      await deadClick(page, viewport.width - 20, viewport.height - 20, 8);
-    }
+    // Wait for the buttons to become enabled first
+    await expect(page.locator("button:has-text('Continue to Checkout')")).toBeEnabled({ timeout: 8000 });
 
-    // Wait for buttons to enable
-    await expect(page.locator("button:has-text('No thanks')")).toBeEnabled({ timeout: 8000 });
+    // NOW generate rage click signals (on enabled buttons - still captures rage clicks in FullStory)
+    console.log("Generating rage clicks on tiny skip button...");
+    await rageClick(page, "text=No thanks, just checkout", 6);
+
+    console.log("Generating rage clicks on Continue to Checkout button...");
+    await rageClick(page, "button:has-text('Continue to Checkout')", 6);
+
+    // Click Continue to proceed
+    await page.locator("button:has-text('Continue to Checkout')").click();
+    await expect(page).toHaveURL("/checkout-it");
   });
 
   test("generate hover signals showing user confusion at checkout fees", async ({ page }) => {
@@ -741,15 +746,20 @@ test.describe("FullStory Signal Generation - Rage Clicks & Hovers", () => {
     await fillSignupForm(page, "Hover Signal Test", email);
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL("/dashboard", { timeout: 5000 });
+
+    // Add to cart (simple flow)
     await page.goto("/browse");
-
-    // Add to cart
     await page.locator("text=Add to cart").first().click();
-    await expect(page.locator("button:has-text('View Cart')")).toBeEnabled({ timeout: 7000 });
-    await page.locator("button:has-text('View Cart')").click();
+    await expect(page.locator("text=added to cart")).toBeVisible({ timeout: 2000 });
 
-    // Go to checkout
+    // Go to cart and through checkout modal
+    await page.goto("/cart");
     await page.click("text=Proceed to Checkout");
+    await expect(page.locator("button:has-text('Continue to Checkout')")).toBeEnabled({ timeout: 7000 });
+    await page.locator("button:has-text('Continue to Checkout')").click();
+
+    // Now on checkout page
+    await expect(page).toHaveURL("/checkout-it");
 
     // Generate hover signals showing confusion over fees
     console.log("Hovering over Subtotal...");
@@ -783,26 +793,33 @@ test.describe("FullStory Signal Generation - Rage Clicks & Hovers", () => {
     await fillSignupForm(page, "Combined Signal Test", email);
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL("/dashboard", { timeout: 5000 });
+
+    // Add to cart (simple flow)
     await page.goto("/browse");
-
-    // Cart modal friction
     await page.locator("text=Add to cart").first().click();
-    await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=added to cart")).toBeVisible({ timeout: 2000 });
 
-    // Hover then rage click pattern
-    await frustratedHover(page, "button:has-text('No thanks')");
-    await rageClick(page, "button:has-text('No thanks')", 8);
+    // Go to cart
+    await page.goto("/cart");
 
-    await frustratedHover(page, "button:has-text('View Cart')");
-    await rageClick(page, "button:has-text('View Cart')", 8);
+    // Checkout modal friction
+    await page.locator("text=Proceed to Checkout").click();
 
-    await expect(page.locator("button:has-text('View Cart')")).toBeEnabled({ timeout: 8000 });
-    await page.locator("button:has-text('View Cart')").click();
+    // Wait for upsell step and buttons to be enabled
+    await expect(page.locator("text=Wait! Don't Miss Out")).toBeVisible({ timeout: 6000 });
+    await expect(page.locator("button:has-text('Continue to Checkout')")).toBeEnabled({ timeout: 8000 });
 
-    // Checkout fee friction
-    await page.click("text=Proceed to Checkout");
+    // Hover then rage click pattern (on enabled buttons - still captures signals)
+    await frustratedHover(page, "text=No thanks, just checkout");
+    await rageClick(page, "text=No thanks, just checkout", 5);
 
-    // Hover over fees with increasing frustration
+    await frustratedHover(page, "button:has-text('Continue to Checkout')");
+    await rageClick(page, "button:has-text('Continue to Checkout')", 5);
+
+    await page.locator("button:has-text('Continue to Checkout')").click();
+
+    // Now on checkout - Hover over fees with increasing frustration
+    await expect(page).toHaveURL("/checkout-it");
     await hoverAndPause(page, "text=Platform Fee", 2000);
     await frustratedHover(page, "text=$4.99");
     await rageClick(page, "text=$4.99", 5); // Rage click on the fee itself
@@ -834,11 +851,21 @@ test.describe("FullStory Signal Generation - Rage Clicks & Hovers", () => {
     await courseCards.hover();
     await page.waitForTimeout(2000);
 
-    // Add to cart
+    // Add to cart (simple toast notification)
     await page.locator("text=Add to cart").first().click();
+    await expect(page.locator("text=added to cart")).toBeVisible({ timeout: 2000 });
+
+    // Go to cart
+    await page.goto("/cart");
+
+    // Cart page - hover over total
+    await hoverAndPause(page, ".font-semibold:has-text('$')", 2000);
+
+    // Click proceed to checkout - triggers modal
+    await page.click("text=Proceed to Checkout");
 
     // Modal Step 1: Processing - user tries to escape
-    await expect(page.locator("text=Securing Your Spot...")).toBeVisible();
+    await expect(page.locator("text=Preparing Your Checkout...")).toBeVisible();
     const viewport = page.viewportSize();
     if (viewport) {
       // Try clicking outside
@@ -846,11 +873,11 @@ test.describe("FullStory Signal Generation - Rage Clicks & Hovers", () => {
       await deadClick(page, viewport.width - 30, 30, 3);
     }
 
-    // Modal Step 2: Confirmation - still trapped
-    await expect(page.locator("text=Added to Cart!")).toBeVisible({ timeout: 3000 });
+    // Modal Step 2: Upsell - frustrated
+    await expect(page.locator("text=Wait! Don't Miss Out")).toBeVisible({ timeout: 3000 });
 
-    // Modal Step 3: Upsell - frustrated
-    await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 2000 });
+    // Wait for buttons to be enabled
+    await expect(page.locator("button:has-text('Continue to Checkout')")).toBeEnabled({ timeout: 8000 });
 
     // Hover over upsell items
     const upsellItems = page.locator(".bg-gray-50.rounded-lg.border");
@@ -860,19 +887,15 @@ test.describe("FullStory Signal Generation - Rage Clicks & Hovers", () => {
       await page.waitForTimeout(800);
     }
 
-    // Rage click buttons
-    await rageClick(page, "button:has-text('No thanks')", 6);
-    await rageClick(page, "button:has-text('View Cart')", 6);
+    // Rage click buttons (on enabled buttons - still captures rage click signals)
+    await rageClick(page, "text=No thanks, just checkout", 4);
+    await rageClick(page, "button:has-text('Continue to Checkout')", 4);
 
-    // Wait and proceed
-    await expect(page.locator("button:has-text('View Cart')")).toBeEnabled({ timeout: 8000 });
-    await page.locator("button:has-text('View Cart')").click();
-
-    // Cart page - hover over total
-    await hoverAndPause(page, ".font-semibold:has-text('$')", 2000);
-    await page.click("text=Proceed to Checkout");
+    // Proceed
+    await page.locator("button:has-text('Continue to Checkout')").click();
 
     // Checkout - examine each fee line
+    await expect(page).toHaveURL("/checkout-it");
     await hoverAndPause(page, "text=Subtotal", 1500);
     await hoverAndPause(page, "text=Platform Fee", 2500);
     await rageClick(page, "text=Platform Fee", 3);
