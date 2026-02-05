@@ -27,7 +27,7 @@ export default function BrowsePage() {
   const [sort, setSort] = useState("recent");
   const [cartIds, setCartIds] = useState<Set<string>>(new Set());
   const [enrolledIds, setEnrolledIds] = useState<Set<string>>(new Set());
-  const [toast, setToast] = useState("");
+  const [toast] = useState("");
   const [mounted, setMounted] = useState(false);
 
   // Cart modal state for dramatic UX friction
