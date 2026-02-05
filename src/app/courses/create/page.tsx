@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -11,6 +11,7 @@ import { trackEvent } from "@/lib/fullstory";
 
 export default function CreateCoursePage() {
   const router = useRouter();
+
   const [formData, setFormData] = useState({
     title: "Advanced Node.js Performance",
     description: "Deep dive into Node.js performance optimization. Covers event loop internals, memory profiling, clustering, and production-grade monitoring strategies.",
@@ -23,6 +24,11 @@ export default function CreateCoursePage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Track page view on mount
+  useEffect(() => {
+    trackEvent("CourseCreation_PageViewed");
+  }, []);
 
   const validate = (): Record<string, string> => {
     const newErrors: Record<string, string> = {};
@@ -81,40 +87,52 @@ export default function CreateCoursePage() {
       return;
     }
 
-    const courseId = generateId();
-    const course = {
-      id: courseId,
-      title: formData.title.trim(),
-      description: formData.description.trim(),
-      category:
-        formData.category === "Other"
-          ? formData.customCategory.trim()
-          : formData.category,
-      difficulty: formData.difficulty as "beginner" | "intermediate" | "advanced",
-      price: Math.round(Number(formData.price) * 100),
-      instructorId: user.id,
-      instructorName: user.name,
-      lessons: [],
-      createdAt: new Date().toISOString(),
-    };
-
-    saveCourse(course);
-
-    trackEvent("CourseCreation_Success", {
-      courseId,
-      category: course.category,
-      difficulty: course.difficulty,
-    });
-
     /*
-     * UX FRICTION: After successful creation, user is redirected to the
-     * dashboard instead of the lesson creation page for the new course.
-     * This breaks the natural flow: create course → add lessons.
-     * TODO [FullStory]: Track how quickly users navigate from dashboard
-     * to lesson creation after course creation — indicates the redirect
-     * destination is wrong.
+     * UX FRICTION: Artificial 3.5 second processing delay with no progress indicator.
+     * Users see a disabled button with "Processing..." text but have no feedback
+     * about what's happening or how long they need to wait. This generates:
+     * - Rage clicks on the submit button
+     * - Increased time-to-complete metrics
+     * - Session replay footage showing user frustration
+     * TODO [FullStory]: Track rage clicks on submit button during processing,
+     * measure time spent waiting, correlate with abandonment rate.
      */
-    router.push("/dashboard");
+    setTimeout(() => {
+      const courseId = generateId();
+      const course = {
+        id: courseId,
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        category:
+          formData.category === "Other"
+            ? formData.customCategory.trim()
+            : formData.category,
+        difficulty: formData.difficulty as "beginner" | "intermediate" | "advanced",
+        price: Math.round(Number(formData.price) * 100),
+        instructorId: user.id,
+        instructorName: user.name,
+        lessons: [],
+        createdAt: new Date().toISOString(),
+      };
+
+      saveCourse(course);
+
+      trackEvent("CourseCreation_Success", {
+        courseId,
+        category: course.category,
+        difficulty: course.difficulty,
+      });
+
+      /*
+       * UX FRICTION: After successful creation, user is redirected to the
+       * dashboard instead of the lesson creation page for the new course.
+       * This breaks the natural flow: create course → add lessons.
+       * TODO [FullStory]: Track how quickly users navigate from dashboard
+       * to lesson creation after course creation — indicates the redirect
+       * destination is wrong.
+       */
+      router.push("/dashboard");
+    }, 3500); // 3.5 second forced delay
   };
 
   const updateField = (field: string, value: string) => {
@@ -378,13 +396,34 @@ export default function CreateCoursePage() {
               >
                 Discard
               </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="px-6 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
-              >
-                {isSubmitting ? "Saving..." : "Publish Course"}
-              </button>
+              <div className="flex items-center gap-3">
+                {/*
+                 * UX FRICTION: "Save Draft" button looks clickable but does nothing.
+                 * Users naturally want to save progress, but clicking this button
+                 * has no effect - generating dead clicks and frustration.
+                 * The button appears enabled and interactive (has hover state) but
+                 * the onClick handler just tracks the dead click without saving.
+                 * TODO [FullStory]: Track dead clicks on this button, measure how
+                 * many users try to save drafts, correlate with form abandonment.
+                 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    trackEvent("CourseCreation_SaveDraftAttempt");
+                    // Dead click - button does nothing!
+                  }}
+                  className="px-6 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Save Draft
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? "Processing..." : "Publish Course"}
+                </button>
+              </div>
             </div>
           </form>
         </div>

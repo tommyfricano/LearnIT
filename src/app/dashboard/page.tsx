@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import CourseCard from "@/components/CourseCard";
 import { getUser, getCourses, getEnrollments } from "@/lib/storage";
 import { User, Course } from "@/lib/types";
+import { trackEvent } from "@/lib/fullstory";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -75,6 +76,7 @@ export default function DashboardPage() {
               {isInstructor && (
                 <Link
                   href="/courses/create"
+                  onClick={() => trackEvent("Dashboard_CreateCourseClick", { location: "header" })}
                   className="inline-flex items-center justify-center px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap"
                 >
                   + New Course
@@ -131,6 +133,7 @@ export default function DashboardPage() {
               </p>
               <Link
                 href={isInstructor ? "/courses/create" : "/browse"}
+                onClick={() => isInstructor && trackEvent("Dashboard_CreateCourseClick", { location: "empty_state" })}
                 className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
               >
                 {isInstructor ? "Create a course" : "Browse courses"} &rarr;

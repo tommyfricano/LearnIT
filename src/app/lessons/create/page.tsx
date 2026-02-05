@@ -40,6 +40,12 @@ function LessonCreateContent() {
 
   useEffect(() => {
     setMounted(true);
+
+    // Track page view
+    trackEvent("LessonCreation_PageViewed", {
+      courseIdParam: courseIdParam || "none"
+    });
+
     const user = getUser();
     if (!user) {
       router.push("/signup");
@@ -50,6 +56,10 @@ function LessonCreateContent() {
 
     if (courseIdParam && allCourses.find((c) => c.id === courseIdParam)) {
       setSelectedCourseId(courseIdParam);
+      trackEvent("LessonCreation_CourseSelected", {
+        courseId: courseIdParam,
+        source: "url_param"
+      });
     }
   }, [router, courseIdParam]);
 
@@ -210,6 +220,7 @@ function LessonCreateContent() {
               </p>
               <Link
                 href="/courses/create"
+                onClick={() => trackEvent("Dashboard_CreateCourseClick", { location: "lesson_page_empty_state" })}
                 className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
               >
                 Create a Course
@@ -237,7 +248,14 @@ function LessonCreateContent() {
                   id="course"
                   value={selectedCourseId}
                   onChange={(e) => {
-                    setSelectedCourseId(e.target.value);
+                    const courseId = e.target.value;
+                    setSelectedCourseId(courseId);
+                    if (courseId) {
+                      trackEvent("LessonCreation_CourseSelected", {
+                        courseId,
+                        source: "manual_selection"
+                      });
+                    }
                     if (errors.course) {
                       setErrors((prev) => {
                         const next = { ...prev };
