@@ -289,7 +289,13 @@ export default function BrowsePage() {
                         ))}
                     </div>
 
-                    {/* Confusing button area */}
+                    {/*
+                      UX FRICTION: The exit button ("No thanks") is intentionally
+                      tiny and hard to click, while "View Cart" is large and prominent.
+                      This creates frustration and rage clicks on the small target.
+                      TODO [FullStory]: Track click accuracy on the tiny exit button
+                      and rage clicks in the surrounding area.
+                    */}
                     <div className="border-t border-gray-100 pt-4">
                       <p className="text-xs text-gray-400 text-center mb-4">
                         {canDismiss
@@ -297,28 +303,31 @@ export default function BrowsePage() {
                           : "Please review the recommendations above..."}
                       </p>
 
-                      <div className="flex gap-3">
+                      {/* Primary CTA - Large and prominent */}
+                      <button
+                        onClick={handleGoToCart}
+                        disabled={!canDismiss}
+                        className={`w-full py-3 text-sm font-medium rounded-lg transition-colors ${
+                          canDismiss
+                            ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                            : "bg-indigo-300 text-indigo-100 cursor-not-allowed"
+                        }`}
+                      >
+                        View Cart ({cartIds.size})
+                      </button>
+
+                      {/* Exit button - Tiny and hard to click */}
+                      <div className="flex justify-center mt-3">
                         <button
                           onClick={handleCloseCartModal}
                           disabled={!canDismiss}
-                          className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                          className={`text-[10px] px-2 py-0.5 transition-colors ${
                             canDismiss
-                              ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                              : "bg-gray-100 text-gray-300 cursor-not-allowed"
+                              ? "text-gray-400 hover:text-gray-500"
+                              : "text-gray-300 cursor-not-allowed"
                           }`}
                         >
-                          Continue Shopping
-                        </button>
-                        <button
-                          onClick={handleGoToCart}
-                          disabled={!canDismiss}
-                          className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-                            canDismiss
-                              ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                              : "bg-indigo-300 text-indigo-100 cursor-not-allowed"
-                          }`}
-                        >
-                          View Cart ({cartIds.size})
+                          No thanks, continue browsing
                         </button>
                       </div>
                     </div>

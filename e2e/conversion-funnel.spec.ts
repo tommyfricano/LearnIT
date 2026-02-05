@@ -170,7 +170,7 @@ test.describe("Cart Modal Friction - Revenue Loss Point #1", () => {
     await expect(page.locator("text=Students who bought this also enjoyed")).toBeVisible();
 
     // Buttons should be disabled initially
-    const continueButton = page.locator("button:has-text('Continue Shopping')");
+    const continueButton = page.locator("button:has-text('No thanks')");
     const viewCartButton = page.locator("button:has-text('View Cart')");
 
     await expect(continueButton).toBeDisabled();
@@ -181,21 +181,21 @@ test.describe("Cart Modal Friction - Revenue Loss Point #1", () => {
     await expect(viewCartButton).toBeEnabled();
   });
 
-  test("user rage clicks on disabled Continue Shopping button", async ({ page }) => {
+  test("user rage clicks on disabled No thanks button", async ({ page }) => {
     // Add to cart
     await page.locator("text=Add to cart").first().click();
 
     // Wait for upsell step where buttons appear
     await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 4000 });
 
-    // Rage click the disabled Continue Shopping button
-    await rageClick(page, "button:has-text('Continue Shopping')", 8);
+    // Rage click the disabled No thanks button
+    await rageClick(page, "button:has-text('No thanks')", 8);
 
     // Modal should still be visible (user is trapped)
     await expect(page.locator(".fixed.inset-0")).toBeVisible();
 
     // Eventually buttons become enabled
-    await expect(page.locator("button:has-text('Continue Shopping')")).toBeEnabled({ timeout: 8000 });
+    await expect(page.locator("button:has-text('No thanks')")).toBeEnabled({ timeout: 8000 });
   });
 
   test("user rage clicks on disabled View Cart button", async ({ page }) => {
@@ -247,8 +247,8 @@ test.describe("Cart Modal Friction - Revenue Loss Point #1", () => {
     // Wait for upsell step
     await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 4000 });
 
-    // Frustrated hover pattern over Continue Shopping button
-    await frustratedHover(page, "button:has-text('Continue Shopping')");
+    // Frustrated hover pattern over No thanks button
+    await frustratedHover(page, "button:has-text('No thanks')");
 
     // Frustrated hover over View Cart button
     await frustratedHover(page, "button:has-text('View Cart')");
@@ -257,7 +257,7 @@ test.describe("Cart Modal Friction - Revenue Loss Point #1", () => {
     await hoverAndPause(page, "text=Please review the recommendations", 2000);
 
     // Rage click after hovering
-    await rageClick(page, "button:has-text('Continue Shopping')", 5);
+    await rageClick(page, "button:has-text('No thanks')", 5);
   });
 
   test("user hovers over upsell items but rage clicks to escape", async ({ page }) => {
@@ -278,10 +278,10 @@ test.describe("Cart Modal Friction - Revenue Loss Point #1", () => {
     }
 
     // Then rage click the disabled button (rejecting upsells)
-    await rageClick(page, "button:has-text('Continue Shopping')", 6);
+    await rageClick(page, "button:has-text('No thanks')", 6);
 
     // Wait for button to enable
-    await expect(page.locator("button:has-text('Continue Shopping')")).toBeEnabled({ timeout: 8000 });
+    await expect(page.locator("button:has-text('No thanks')")).toBeEnabled({ timeout: 8000 });
   });
 
   test("user abandons browse page after experiencing modal friction", async ({ page }) => {
@@ -290,13 +290,13 @@ test.describe("Cart Modal Friction - Revenue Loss Point #1", () => {
     await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 5000 });
 
     // Rage click while waiting
-    await rageClick(page, "button:has-text('Continue Shopping')", 4);
+    await rageClick(page, "button:has-text('No thanks')", 4);
 
     // Wait for dismiss to be allowed
-    await expect(page.locator("button:has-text('Continue Shopping')")).toBeEnabled({ timeout: 8000 });
+    await expect(page.locator("button:has-text('No thanks')")).toBeEnabled({ timeout: 8000 });
 
     // User chooses to continue shopping (not view cart = potential abandonment signal)
-    await page.locator("button:has-text('Continue Shopping')").click();
+    await page.locator("button:has-text('No thanks')").click();
 
     // User is back on browse but may navigate away (simulated)
     await expect(page).toHaveURL("/browse");
@@ -571,7 +571,7 @@ test.describe("Full Funnel - Signup to Abandonment", () => {
     await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 5000 });
 
     // Rage click both buttons
-    await rageClick(page, "button:has-text('Continue Shopping')", 5);
+    await rageClick(page, "button:has-text('No thanks')", 5);
     await rageClick(page, "button:has-text('View Cart')", 5);
 
     // Rage click backdrop
@@ -650,7 +650,7 @@ test.describe("Funnel Metrics - Quantifying Revenue Loss", () => {
     await page.locator("text=Add to cart").first().click();
 
     // Wait for modal to become dismissable
-    await expect(page.locator("button:has-text('Continue Shopping')")).toBeEnabled({ timeout: 8000 });
+    await expect(page.locator("button:has-text('No thanks')")).toBeEnabled({ timeout: 8000 });
 
     // Calculate time spent
     const timeInModal = Date.now() - startTime;
@@ -715,8 +715,8 @@ test.describe("FullStory Signal Generation - Rage Clicks & Hovers", () => {
     await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 5000 });
 
     // Generate rage click signals on key elements
-    console.log("Generating rage clicks on Continue Shopping button...");
-    await rageClick(page, "button:has-text('Continue Shopping')", 10);
+    console.log("Generating rage clicks on No thanks button...");
+    await rageClick(page, "button:has-text('No thanks')", 10);
 
     console.log("Generating rage clicks on View Cart button...");
     await rageClick(page, "button:has-text('View Cart')", 10);
@@ -731,7 +731,7 @@ test.describe("FullStory Signal Generation - Rage Clicks & Hovers", () => {
     }
 
     // Wait for buttons to enable
-    await expect(page.locator("button:has-text('Continue Shopping')")).toBeEnabled({ timeout: 8000 });
+    await expect(page.locator("button:has-text('No thanks')")).toBeEnabled({ timeout: 8000 });
   });
 
   test("generate hover signals showing user confusion at checkout fees", async ({ page }) => {
@@ -790,8 +790,8 @@ test.describe("FullStory Signal Generation - Rage Clicks & Hovers", () => {
     await expect(page.locator("text=Great Choice!")).toBeVisible({ timeout: 5000 });
 
     // Hover then rage click pattern
-    await frustratedHover(page, "button:has-text('Continue Shopping')");
-    await rageClick(page, "button:has-text('Continue Shopping')", 8);
+    await frustratedHover(page, "button:has-text('No thanks')");
+    await rageClick(page, "button:has-text('No thanks')", 8);
 
     await frustratedHover(page, "button:has-text('View Cart')");
     await rageClick(page, "button:has-text('View Cart')", 8);
@@ -861,7 +861,7 @@ test.describe("FullStory Signal Generation - Rage Clicks & Hovers", () => {
     }
 
     // Rage click buttons
-    await rageClick(page, "button:has-text('Continue Shopping')", 6);
+    await rageClick(page, "button:has-text('No thanks')", 6);
     await rageClick(page, "button:has-text('View Cart')", 6);
 
     // Wait and proceed
