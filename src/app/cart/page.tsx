@@ -192,19 +192,7 @@ export default function CartPage() {
                   </span>
                 </div>
 
-                {/*
-                  UX FRICTION: A "$0.00 processing fee" line is shown, which
-                  draws attention to fees even though there are none. Users may
-                  worry about hidden fees appearing later.
-                  TODO [FullStory]: Track hover/click on the processing fee
-                  line to see if users try to get more information about it.
-                */}
-                <div className="flex justify-between text-xs text-gray-400 mb-4">
-                  <span>Processing fee</span>
-                  <span>$0.00</span>
-                </div>
-
-                <div className="border-t border-gray-100 pt-4 flex justify-between">
+                <div className="border-t border-gray-100 pt-4 mt-2 flex justify-between">
                   <span className="font-semibold text-gray-900">Total</span>
                   <span className="font-semibold text-gray-900">
                     ${formatPrice(totalCents)}

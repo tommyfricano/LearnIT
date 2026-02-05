@@ -12,6 +12,7 @@ import {
   isInCart as checkIsInCart,
   isEnrolled as checkIsEnrolled,
   seedDemoCourses,
+  formatPrice,
 } from "@/lib/storage";
 import { Course, User } from "@/lib/types";
 import { trackEvent } from "@/lib/fullstory";
@@ -28,6 +29,12 @@ export default function BrowsePage() {
   const [enrolledIds, setEnrolledIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState("");
   const [mounted, setMounted] = useState(false);
+
+  // Cart modal state for dramatic UX friction
+  const [showCartModal, setShowCartModal] = useState(false);
+  const [cartModalStep, setCartModalStep] = useState<"processing" | "confirm" | "upsell">("processing");
+  const [addedCourse, setAddedCourse] = useState<Course | null>(null);
+  const [canDismiss, setCanDismiss] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -54,25 +61,79 @@ export default function BrowsePage() {
       return;
     }
 
-    addToCart(courseId);
-    setCartIds((prev) => new Set(prev).add(courseId));
+    const course = courses.find((c) => c.id === courseId);
+    if (!course) return;
 
     /*
-      UX FRICTION: The "Added to cart" confirmation appears as a brief
-      toast at the top of the page that auto-dismisses after 2 seconds.
-      Users may not see it if they're looking at the card they just clicked.
-      There's no direct "Go to Cart" link in the toast.
-      TODO [FullStory]: Track whether users look for a cart-link in the
-      toast area (dead clicks near the toast).
+      UX FRICTION: "Dramatic cart modal" pattern — instead of a simple toast,
+      we show a full-screen blocking modal with multiple steps:
+      1. "Processing" spinner (fake delay)
+      2. Confirmation with confusing button labels
+      3. Upsell/cross-sell attempt before allowing dismissal
+      This creates frustration and may cause users to abandon browsing.
+      TODO [FullStory]: Track modal interaction patterns:
+      - Time spent on each modal step
+      - Rage clicks on disabled "Continue" button
+      - Clicks outside modal (attempting to dismiss)
+      - Which exit path users take (Continue Shopping vs View Cart)
     */
-    const course = courses.find((c) => c.id === courseId);
-    trackEvent("Browse_AddToCart", {
+    setAddedCourse(course);
+    setShowCartModal(true);
+    setCartModalStep("processing");
+    setCanDismiss(false);
+
+    trackEvent("Browse_AddToCartModalOpened", {
       courseId,
-      price: course?.price ?? 0,
-      cartSize: cartIds.size + 1,
+      price: course.price ?? 0,
     });
-    setToast(`"${course?.title}" added to cart`);
-    setTimeout(() => setToast(""), 2000);
+
+    // Step 1: Fake processing delay (2 seconds)
+    setTimeout(() => {
+      addToCart(courseId);
+      setCartIds((prev) => new Set(prev).add(courseId));
+      setCartModalStep("confirm");
+
+      trackEvent("Browse_AddToCart", {
+        courseId,
+        price: course.price ?? 0,
+        cartSize: cartIds.size + 1,
+      });
+
+      // Step 2: Show confirmation, then move to upsell after 1.5 seconds
+      setTimeout(() => {
+        setCartModalStep("upsell");
+
+        // Step 3: Only allow dismissal after another 2 seconds on upsell
+        setTimeout(() => {
+          setCanDismiss(true);
+          trackEvent("Browse_CartModalDismissable", { courseId });
+        }, 2000);
+      }, 1500);
+    }, 2000);
+  };
+
+  const handleCloseCartModal = () => {
+    if (!canDismiss) {
+      trackEvent("Browse_CartModalEarlyDismissAttempt", {
+        courseId: addedCourse?.id,
+        step: cartModalStep,
+      });
+      return;
+    }
+    setShowCartModal(false);
+    setAddedCourse(null);
+    trackEvent("Browse_CartModalClosed", {
+      courseId: addedCourse?.id,
+      exitPath: "continue_shopping",
+    });
+  };
+
+  const handleGoToCart = () => {
+    trackEvent("Browse_CartModalClosed", {
+      courseId: addedCourse?.id,
+      exitPath: "view_cart",
+    });
+    router.push("/cart");
   };
 
   let filteredCourses =
@@ -115,10 +176,155 @@ export default function BrowsePage() {
       <Header />
       <main className="flex-1 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Toast */}
+          {/* Toast (legacy - keeping for non-modal events) */}
           {toast && (
             <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-sm text-indigo-700 transition-all">
               {toast}
+            </div>
+          )}
+
+          {/* Cart Modal - Dramatic UX Friction */}
+          {showCartModal && addedCourse && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              {/* Backdrop - clicking does nothing or shows frustration */}
+              <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                onClick={handleCloseCartModal}
+              />
+
+              {/* Modal */}
+              <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+                {/* Step 1: Processing */}
+                {cartModalStep === "processing" && (
+                  <div className="p-8 text-center">
+                    <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-6" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      Securing Your Spot...
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Please wait while we reserve this course for you.
+                    </p>
+                    <p className="text-xs text-gray-400 mt-4">
+                      Do not close this window
+                    </p>
+                  </div>
+                )}
+
+                {/* Step 2: Confirmation */}
+                {cartModalStep === "confirm" && (
+                  <div className="p-8 text-center">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <svg
+                        className="w-8 h-8 text-green-600"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      Added to Cart!
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      &ldquo;{addedCourse.title}&rdquo; has been added.
+                    </p>
+                    <p className="text-xs text-gray-400 mt-4 animate-pulse">
+                      Loading recommendations...
+                    </p>
+                  </div>
+                )}
+
+                {/* Step 3: Upsell/Cross-sell */}
+                {cartModalStep === "upsell" && (
+                  <div className="p-6">
+                    <div className="text-center mb-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                        Great Choice!
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        Students who bought this also enjoyed:
+                      </p>
+                    </div>
+
+                    {/* Fake upsell courses */}
+                    <div className="space-y-3 mb-6">
+                      {courses
+                        .filter((c) => c.id !== addedCourse.id && !cartIds.has(c.id))
+                        .slice(0, 2)
+                        .map((course) => (
+                          <div
+                            key={course.id}
+                            className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
+                          >
+                            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">
+                                {course.title}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                ${formatPrice(course.price ?? 0)}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                trackEvent("Browse_UpsellClicked", {
+                                  originalCourseId: addedCourse.id,
+                                  upsellCourseId: course.id,
+                                });
+                                addToCart(course.id);
+                                setCartIds((prev) => new Set(prev).add(course.id));
+                              }}
+                              disabled={cartIds.has(course.id)}
+                              className="text-xs font-medium text-indigo-600 hover:text-indigo-700 disabled:text-gray-400"
+                            >
+                              {cartIds.has(course.id) ? "Added" : "+ Add"}
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+
+                    {/* Confusing button area */}
+                    <div className="border-t border-gray-100 pt-4">
+                      <p className="text-xs text-gray-400 text-center mb-4">
+                        {canDismiss
+                          ? "You may now continue"
+                          : "Please review the recommendations above..."}
+                      </p>
+
+                      <div className="flex gap-3">
+                        <button
+                          onClick={handleCloseCartModal}
+                          disabled={!canDismiss}
+                          className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                            canDismiss
+                              ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                              : "bg-gray-100 text-gray-300 cursor-not-allowed"
+                          }`}
+                        >
+                          Continue Shopping
+                        </button>
+                        <button
+                          onClick={handleGoToCart}
+                          disabled={!canDismiss}
+                          className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                            canDismiss
+                              ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                              : "bg-indigo-300 text-indigo-100 cursor-not-allowed"
+                          }`}
+                        >
+                          View Cart ({cartIds.size})
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

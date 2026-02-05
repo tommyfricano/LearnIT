@@ -20,6 +20,20 @@ import { trackEvent } from "@/lib/fullstory";
 
 /* Journey 1: Checkout step in signup-to-enrollment funnel — see FullStory Funnels */
 
+/*
+  UX FRICTION: "Surprise fees" pattern — users see a clean subtotal on the cart
+  page, but when they reach checkout they discover a Platform Fee + Tax that
+  increases the total. This classic bait-and-switch triggers cart abandonment.
+  TODO [FullStory]: Track Checkout_FeesRevealed event and monitor:
+  - Checkout page abandonment rate (Funnel)
+  - Time spent on checkout page before abandoning
+  - Back button clicks to return to cart
+  - Session Replay showing exact moment user sees fees
+*/
+
+const PLATFORM_FEE_CENTS = 499; // $4.99
+const TAX_RATE = 0.0825; // 8.25%
+
 export default function CheckoutPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -58,11 +72,21 @@ export default function CheckoutPage() {
       .filter((c): c is Course => c !== null);
     setCartCourses(courses);
 
-    const total = courses.reduce((sum, c) => sum + (c.price ?? 0), 0);
-    trackEvent("Checkout_Started", { itemCount: courses.length, totalCents: total });
+    const subtotal = courses.reduce((sum, c) => sum + (c.price ?? 0), 0);
+    const tax = Math.round(subtotal * TAX_RATE);
+    const grandTotal = subtotal + PLATFORM_FEE_CENTS + tax;
+    trackEvent("Checkout_Started", { itemCount: courses.length, subtotalCents: subtotal, grandTotalCents: grandTotal });
+    trackEvent("Checkout_FeesRevealed", {
+      subtotalCents: subtotal,
+      platformFeeCents: PLATFORM_FEE_CENTS,
+      taxCents: tax,
+      grandTotalCents: grandTotal,
+    });
   }, [router]);
 
-  const totalCents = cartCourses.reduce((sum, c) => sum + (c.price ?? 0), 0);
+  const subtotalCents = cartCourses.reduce((sum, c) => sum + (c.price ?? 0), 0);
+  const taxCents = Math.round(subtotalCents * TAX_RATE);
+  const grandTotalCents = subtotalCents + PLATFORM_FEE_CENTS + taxCents;
 
   const validate = (): Record<string, string> => {
     const newErrors: Record<string, string> = {};
@@ -96,7 +120,7 @@ export default function CheckoutPage() {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
 
-    trackEvent("Checkout_SubmitAttempt", { totalCents });
+    trackEvent("Checkout_SubmitAttempt", { subtotalCents, grandTotalCents });
 
     const validationErrors = validate();
     if (Object.keys(validationErrors).length > 0) {
@@ -128,7 +152,7 @@ export default function CheckoutPage() {
         id: generateId(),
         userId: user.id,
         items: orderItems,
-        totalCents,
+        totalCents: grandTotalCents,
         status: "completed",
         createdAt: new Date().toISOString(),
       };
@@ -139,7 +163,10 @@ export default function CheckoutPage() {
 
       trackEvent("Checkout_Success", {
         orderId: order.id,
-        totalCents,
+        subtotalCents,
+        platformFeeCents: PLATFORM_FEE_CENTS,
+        taxCents,
+        grandTotalCents,
         itemCount: orderItems.length,
       });
 
@@ -380,7 +407,7 @@ export default function CheckoutPage() {
                 >
                   {isProcessing
                     ? "Processing..."
-                    : `Complete Purchase \u2014 $${formatPrice(totalCents)}`}
+                    : `Complete Purchase — $${formatPrice(grandTotalCents)}`}
                 </button>
               </form>
             </div>
@@ -406,11 +433,31 @@ export default function CheckoutPage() {
                     </div>
                   ))}
                 </div>
-                <div className="flex justify-between font-semibold pt-4 mt-2 border-t border-gray-200">
-                  <span className="text-gray-900">Total</span>
-                  <span className="text-gray-900">
-                    ${formatPrice(totalCents)}
-                  </span>
+                <div className="pt-4 mt-2 border-t border-gray-200 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Subtotal</span>
+                    <span className="text-gray-900">
+                      ${formatPrice(subtotalCents)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Platform Fee</span>
+                    <span className="text-gray-900">
+                      ${formatPrice(PLATFORM_FEE_CENTS)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Tax (8.25%)</span>
+                    <span className="text-gray-900">
+                      ${formatPrice(taxCents)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-semibold pt-2 border-t border-gray-100">
+                    <span className="text-gray-900">Total</span>
+                    <span className="text-gray-900">
+                      ${formatPrice(grandTotalCents)}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
