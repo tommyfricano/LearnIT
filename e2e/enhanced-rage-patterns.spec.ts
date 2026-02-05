@@ -289,6 +289,178 @@ test.describe("Funnel Volume - Cart to Checkout Drop-off", () => {
   });
 });
 
+test.describe("Instructor Course Creation Friction", () => {
+  test("generate 12 instructors who experience Save Draft dead clicks", async ({ page }) => {
+    // These instructors try the "Save Draft" button which does nothing,
+    // generating dead clicks and frustration signals
+
+    const totalInstructors = 12;
+
+    for (let i = 0; i < totalInstructors; i++) {
+      console.log(`\n--- Instructor ${i + 1}/${totalInstructors}: Starting journey ---`);
+
+      // Step 1: Signup as instructor
+      await page.goto("/signup");
+      const email = `instructor-${Date.now()}-${i}@example.com`;
+      await page.fill("#fullName", `Instructor ${i + 1}`);
+      await page.fill("#email", email);
+      await page.fill("#emailConfirm", email);
+
+      // Select instructor role
+      await page.selectOption('select[name="role"]', "instructor");
+      await page.locator('input[type="checkbox"]').first().check();
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL("/dashboard", { timeout: 5000 });
+      console.log(`Instructor ${i + 1}: ✅ Signed up as instructor`);
+
+      // Step 2: Click "Create Course" from dashboard
+      await page.click('text=New Course');
+      await expect(page).toHaveURL("/courses/create", { timeout: 5000 });
+      console.log(`Instructor ${i + 1}: ✅ Clicked 'New Course' (Dashboard_CreateCourseClick fired)`);
+
+      // Step 3: Fill out course form
+      await page.fill("#title", `Advanced Course ${i + 1}`);
+      await page.fill("#description", "This is a comprehensive course covering advanced topics in detail.");
+      await page.selectOption("#category", "Programming");
+      await page.selectOption("#difficulty", "advanced");
+      await page.fill("#price", "79.99");
+      console.log(`Instructor ${i + 1}: ✅ Filled course form`);
+
+      // Step 4: Try "Save Draft" button multiple times (DEAD CLICKS!)
+      const draftClicks = Math.floor(Math.random() * 3) + 2; // 2-4 clicks
+      console.log(`Instructor ${i + 1}: 🔥 Trying Save Draft ${draftClicks} times...`);
+      for (let j = 0; j < draftClicks; j++) {
+        await page.click('button:has-text("Save Draft")');
+        await page.waitForTimeout(300); // Pause between clicks
+      }
+      console.log(`Instructor ${i + 1}: ❌ Save Draft does nothing (dead clicks!)`);
+
+      // Step 5: Different outcomes based on instructor
+      const outcome = i % 3;
+
+      if (outcome === 0) {
+        // Complete course creation (endure 3.5s delay)
+        console.log(`Instructor ${i + 1}: ✅ Proceeding to publish...`);
+        await page.click('button[type="submit"]:has-text("Publish Course")');
+
+        // Wait through 3.5s processing delay
+        console.log(`Instructor ${i + 1}: ⏳ Waiting through 3.5s processing delay...`);
+        await expect(page).toHaveURL("/dashboard", { timeout: 8000 });
+        console.log(`Instructor ${i + 1}: ✅ Course created! (redirected to dashboard)`);
+      } else if (outcome === 1) {
+        // Try Save Draft again, then abandon
+        console.log(`Instructor ${i + 1}: 🔥 Trying Save Draft again out of frustration...`);
+        await page.click('button:has-text("Save Draft")');
+        await page.click('button:has-text("Save Draft")');
+        await page.waitForTimeout(500);
+        console.log(`Instructor ${i + 1}: ❌ Giving up, navigating away...`);
+        await page.goto("/dashboard");
+      } else {
+        // Complete course creation
+        await page.click('button[type="submit"]:has-text("Publish Course")');
+        await expect(page).toHaveURL("/dashboard", { timeout: 8000 });
+        console.log(`Instructor ${i + 1}: ✅ Course created!`);
+      }
+
+      // Clear storage for next instructor
+      try {
+        await page.evaluate(() => localStorage.clear());
+      } catch {
+        await page.goto("/");
+        await page.evaluate(() => localStorage.clear());
+      }
+    }
+
+    console.log(`\n=== INSTRUCTOR FRICTION IMPACT ===`);
+    console.log(`✅ ${totalInstructors} instructors experienced Save Draft dead clicks`);
+    console.log(`🔥 ~${totalInstructors * 2.5} total dead clicks on Save Draft button`);
+    console.log(`⏳ ~${Math.floor(totalInstructors * 0.67)} experienced 3.5s processing delay`);
+    console.log(`❌ ~${Math.floor(totalInstructors * 0.33)} abandoned after dead click frustration\n`);
+  });
+
+  test("generate 5 instructors who complete course + lesson creation", async ({ page }) => {
+    // These instructors complete the full flow: course creation → lesson creation
+    // Demonstrates the wrong redirect friction (time gap between course and lesson)
+
+    test.setTimeout(300000); // 5 minutes for full journeys
+
+    const totalInstructors = 5;
+
+    for (let i = 0; i < totalInstructors; i++) {
+      console.log(`\n--- Complete Journey Instructor ${i + 1}/${totalInstructors} ---`);
+
+      // Signup as instructor
+      await page.goto("/signup");
+      const email = `complete-instructor-${Date.now()}-${i}@example.com`;
+      await page.fill("#fullName", `Complete Journey Instructor ${i + 1}`);
+      await page.fill("#email", email);
+      await page.fill("#emailConfirm", email);
+      await page.selectOption('select[name="role"]', "instructor");
+      await page.locator('input[type="checkbox"]').first().check();
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL("/dashboard", { timeout: 5000 });
+      console.log(`Instructor ${i + 1}: ✅ Signed up`);
+
+      // Create course
+      await page.click('text=New Course');
+      await expect(page).toHaveURL("/courses/create");
+      await page.fill("#title", `Complete Course ${i + 1}`);
+      await page.fill("#description", "A fully set up course with lessons.");
+      await page.selectOption("#category", "Programming");
+      await page.selectOption("#difficulty", "intermediate");
+      await page.fill("#price", "49.99");
+
+      // Try Save Draft once (dead click)
+      console.log(`Instructor ${i + 1}: 🔥 Trying Save Draft (dead click)...`);
+      await page.click('button:has-text("Save Draft")');
+      await page.waitForTimeout(400);
+
+      // Submit and wait through processing
+      console.log(`Instructor ${i + 1}: ⏳ Publishing course...`);
+      await page.click('button[type="submit"]:has-text("Publish Course")');
+      await expect(page).toHaveURL("/dashboard", { timeout: 8000 });
+      console.log(`Instructor ${i + 1}: ✅ Course created (redirected to dashboard - WRONG!)`);
+
+      // Now must manually navigate to lesson creation (FRICTION!)
+      console.log(`Instructor ${i + 1}: 🔍 Manually navigating to lesson creation...`);
+      await page.waitForTimeout(2000); // Simulate confusion/looking around
+      await page.goto("/lessons/create");
+      await expect(page).toHaveURL("/lessons/create");
+      console.log(`Instructor ${i + 1}: ✅ Found lesson creation page`);
+
+      // Select the course from dropdown
+      const courseDropdown = page.locator("#course");
+      await courseDropdown.selectOption({ index: 1 }); // Select first actual course (index 0 is placeholder)
+      console.log(`Instructor ${i + 1}: ✅ Selected course from dropdown`);
+
+      // Fill lesson form
+      await page.fill("#title", `Lesson 1: Introduction`);
+      await page.selectOption("#type", "video");
+      await page.fill("#content", "Welcome to this course! In this lesson we'll cover the basics.");
+      await page.fill("#duration", "15");
+
+      // Submit lesson
+      console.log(`Instructor ${i + 1}: ✅ Creating first lesson...`);
+      await page.click('button[type="submit"]');
+      await page.waitForTimeout(1000);
+      console.log(`Instructor ${i + 1}: 🎉 LESSON CREATED! Complete journey finished.\n`);
+
+      // Clear storage
+      try {
+        await page.evaluate(() => localStorage.clear());
+      } catch {
+        await page.goto("/");
+        await page.evaluate(() => localStorage.clear());
+      }
+    }
+
+    console.log(`\n=== COMPLETE JOURNEY IMPACT ===`);
+    console.log(`✅ ${totalInstructors} instructors completed full course + lesson flow`);
+    console.log(`⏰ All experienced 2+ second delay due to wrong redirect`);
+    console.log(`📊 Shows course completion rate and redirect friction\n`);
+  });
+});
+
 test.describe("Enhanced Frustration Signals - Escalating Rage Patterns", () => {
   test("escalating rage clicks on disabled Continue to Checkout button", async ({ page }) => {
     // Setup
